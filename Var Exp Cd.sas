@@ -1,0 +1,130 @@
+/**********************************UNIVARIATE MACRO**************************************************************/
+%MACRO NUM_CHAR(LIBNAME, DATA);
+	OPTIONS MACROGEN SYMBOLGEN;
+
+	PROC DATASETS;
+		DELETE NUM1 NUM2 CHAR2 ANALYSE_NUM ANALYSE_CHAR CHAR_GROUPS;
+		RUN;
+		LIBNAME IN &LIBNAME;
+
+	PROC CONTENTS DATA=IN.&DATA  NOPRINT OUT=TEMP (KEEP=NAME TYPE LABEL);
+	RUN;
+
+	DATA _NULL_;
+		SET TEMP END=FINAL;
+
+		IF FINAL THEN
+			CALL SYMPUT("TOT_VAR", _N_);
+	RUN;
+
+	%DO II=1 %TO &TOT_VAR;
+
+		DATA _NULL_;
+			SET TEMP;
+
+			IF _N_=&II THEN
+				DO;
+					CALL SYMPUT("VARIABLE", NAME);
+					CALL SYMPUT("VAR_TYPE", TYPE);
+					CALL SYMPUT("VAR_LABEL", LABEL);
+				END;
+		RUN;
+
+		%IF &VAR_TYPE=1 %THEN
+			%DO;
+
+				/* This Module is for Numeric Attributes
+				*/
+				PROC UNIVARIATE DATA=IN.&DATA NOPRINT;
+					/* by market;*/
+					VAR
+&VARIABLE;
+					OUTPUT OUT=NUM1 NOBS=TOTAL_OBS NMISS=MISSING_COUNT MIN=MIN_VALUE MEAN=MEAN 
+						MEDIAN=MEDIAN MODE=MODE MAX=MAX_VALUE STD=STD_DEV PCTLPTS=1 5 25 50 75 90 
+						95 98 99 99.9 100 PCTLPRE=PCTL_ PCTLNAME=P001 P005 P25 P50 P75 P90 P95 
+						P98 P99 P99_9 P100;
+				RUN;
+
+				DATA NUM2;
+					RETAIN VAR_NAME TYPE LABEL TOTAL_OBS MISSING_COUNT MISSING_PERCENTAGE 
+						MIN_VALUE MEDIAN MEAN MAX_VALUE MODE STD_DEV PCTL_P001 PCTL_P005 PCTL_P25 
+						PCTL_P50 PCTL_P75 PCTL_P90 PCTL_P95 PCTL_P98 PCTL_P99 PCTL_P99_9;
+					SET NUM1;
+					FORMAT VAR_NAME $32.;
+					VAR_NAME="&VARIABLE";
+					FORMAT TYPE 2.;
+					TYPE=&VAR_TYPE;
+					FORMAT LABEL $100.;
+					LABEL="&VAR_LABEL";
+					MISSING_PERCENTAGE=(MISSING_COUNT/TOTAL_OBS)*100;
+				RUN;
+
+				PROC APPEND BASE=ANALYSE_NUM DATA=NUM2 FORCE;
+				RUN;
+
+			%END;
+
+		%IF &VAR_TYPE=2 %THEN
+			%DO;
+
+				/* This Module is for Character Attributes
+				*/
+				PROC SQL;
+					CREATE TABLE CHAR1 AS SELECT COUNT(*) AS TOTAL_OBS, 
+						COUNT(DISTINCT &VARIABLE) AS DISTINCT_CATEGORIES, SUM (CASE 
+						WHEN &VARIABLE='' THEN 1 ELSE 0 END) AS MISSING_COUNT FROM IN.&DATA;
+				QUIT;
+
+				DATA CHAR2;
+					RETAIN VAR_NAME TYPE LABEL TOTAL_OBS MISSING_COUNT MISSING_PERCENTAGE;
+					SET CHAR1;
+					FORMAT VAR_NAME $32.;
+					VAR_NAME="&VARIABLE";
+					FORMAT TYPE 2.;
+					TYPE=&VAR_TYPE;
+					FORMAT LABEL $100.;
+					LABEL="&VAR_LABEL";
+					MISSING_PERCENTAGE=(MISSING_COUNT/TOTAL_OBS)*100;
+				RUN;
+
+				PROC APPEND BASE=ANALYSE_CHAR DATA=CHAR2 FORCE;
+				RUN;
+
+				/* This Module is for getting Character Groups Attributes
+				*/
+				/* PROC SQL;*/
+				/* CREATE TABLE GROUPS AS SELECT &VARIABLE AS VARIABLE, COUNT(*) AS FREQ FROM IN.&DATA*/
+				/* GROUP BY &VARIABLE;*/
+				/* QUIT;*/
+				/**/
+				/* DATA GROUPS;*/
+				/* RETAIN VAR_NAME VARIABLE FREQ;*/
+				/* SET GROUPS;*/
+				/* FORMAT VAR_NAME $32.;*/
+				/* VAR_NAME = "&VARIABLE";*/
+				/* RUN;*/
+				/**/
+				/* PROC APPEND
+				BASE = CHAR_GROUPS DATA = GROUPS FORCE;*/
+				/* RUN;*/
+ 
+%END;
+	%END;
+%MEND;
+
+/* INPUTS
+*/
+%NUM_CHAR("/folders/myfolders/coursedata/ECST142/data", 
+	ameshousing3);
+RUN;
+
+PROC EXPORT DATA=WORK.ANALYSE_NUM OUTFILE="D:\Mohita Ghosh\Mohita\E\Hilton Logistic Training\Logistic_Regression_Training_ADT_201303\Sample Data\working\univar1.csv" 
+		DBMS=CSV REPLACE;
+RUN;
+
+PROC EXPORT DATA=WORK.ANALYSE_CHAR OUTFILE="D:\Mohita Ghosh\Mohita\E\Hilton Logistic Training\Logistic_Regression_Training_ADT_201303\Sample Data\working\univar1C.csv" 
+		DBMS=CSV REPLACE;
+RUN;
+
+/*********END OF UNIVARIATE MACRO**********************************************************************************/
+/***********************************************************************************************************************/
